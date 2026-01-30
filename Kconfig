@@ -1,88 +1,155 @@
 # SPDX-License-Identifier: GPL-2.0
 #
-# Copyright (C) 2021-2023 Dakkshesh <dakkshesh5@gmail.com>.
+# Copyright (C) 2021-2025 Dakkshesh <dakkshesh5@gmail.com>.
+#
+# Kprofiles configuration
 
 config KPROFILES
 	tristate "Kprofiles Kernel Module"
 	default y
 	help
-	  This allows you to regulate in-kernel activities in a profile-oriented manner.
-	  It creates a sysfs node which can be used to change profiles via userspace.
-	  It provides 4 profile modes: Disabled, Battery, Balanced and Performance.
-
-	  The former can be used to disable/enable or tune kernel activities according
-	  to a profile mode. Check the README.md for more information.
-
-	  It's safe to say Y here, as the driver isn't very demanding and is only
-	  used when developer uses the exported API functions in an another driver.
+	  Kprofiles provides a profile-oriented framework for regulating kernel
+	  activities and optimizing system behavior based on usage patterns.
+	  
+	  It creates a sysfs interface (/sys/kernel/kprofiles/) for managing
+	  four distinct profile modes:
+	  
+	  - Mode 0 (Disabled): Kprofiles is inactive
+	  - Mode 1 (Battery): Optimized for power saving
+	  - Mode 2 (Balanced): Balance between performance and battery life
+	  - Mode 3 (Performance): Optimized for maximum performance
+	  
+	  Kernel developers can use the exported API functions to adjust kernel
+	  features dynamically based on the active profile mode. This allows for
+	  fine-grained control over CPU frequencies, I/O scheduling, memory
+	  management, and other kernel subsystems.
+	  
+	  The module has minimal overhead and is only active when developers
+	  explicitly use the API functions in other drivers.
+	  
+	  For detailed documentation and usage examples, visit:
+	  https://github.com/beakthoven/Kprofiles
+	  
+	  If unsure, say Y.
 
 if KPROFILES
 
 config KP_DEFAULT_MODE
-	int "Default mode number for kp_mode"
+	int "Default profile mode at boot"
 	range 0 3
 	default 0
 	help
-	  Kprofiles will activate this mode during boot-up.
+	  Specify which profile mode Kprofiles should activate during system
+	  boot. Valid values are:
+	  
+	  0 = Disabled (default)
+	  1 = Battery
+	  2 = Balanced
+	  3 = Performance
+	  
+	  This mode can be changed at runtime via sysfs or kernel APIs.
+	  Most users should leave this at 0 (Disabled) and let userspace
+	  tools manage the profile mode based on system state.
 
 config AUTO_KPROFILES
 	bool
 	help
-	  This option is selected if one of the Auto Kprofiles options is enabled.
+	  Internal option automatically selected when any Auto Kprofiles
+	  backend is enabled. Do not select this manually.
 
 choice
-	prompt "Auto Kprofiles support"
+	prompt "Auto Kprofiles backend"
 	default AUTO_KPROFILES_NONE
 	help
-	  This option toggles the automated mode changer in Kprofile. When enabled,
-	  Kprofiles will utilise the notifier API(s) to transition between presently
-	  active mode and battery mode based on the device's screen state. Because
-	  of notifier API requirements, it is disabled by default.
-
-	  If unsure, select AUTO_KPROFILES_NONE.
+	  Auto Kprofiles automatically switches the profile mode based on
+	  screen state using kernel notifier chains:
+	  
+	  - Screen OFF: Switches to Battery mode (mode 1)
+	  - Screen ON:  Restores previously active mode
+	  
+	  Select the appropriate notifier backend for your platform. Most
+	  devices use MSM DRM for display management. If your kernel doesn't
+	  support display notifiers or you prefer manual control, select None.
+	  
+	  Note: Automatic mode switching can be enabled/disabled at runtime
+	  via the /sys/kernel/kprofiles/auto_kp sysfs node.
 
 config AUTO_KPROFILES_MSM_DRM
-	bool "Auto Kprofiles using msm_drm_notifier"
+	bool "MSM DRM notifier (Qualcomm platforms)"
 	depends on DRM_MSM
 	select AUTO_KPROFILES
 	help
-	  Select this to enable Kprofile's automatic mode changer via msm_drm_notifier.
-	  When this option is enabled, Kprofiles will automatically switch to battery
-	  mode when device screen turns off and will switch back to previously active
-	  mode when the device wakes up.
+	  Enable automatic profile mode switching using the MSM DRM notifier.
+	  This is the recommended option for devices with Qualcomm SoCs that
+	  use the MSM display driver.
+	  
+	  When enabled, Kprofiles will:
+	  - Switch to Battery mode when the screen turns off
+	  - Restore the previous mode when the screen turns on
+	  
+	  This helps conserve battery during screen-off periods while
+	  maintaining performance when the device is actively used.
 
 config AUTO_KPROFILES_MI_DRM
-	bool "Auto Kprofiles using mi_drm_notifier"
+	bool "MI DRM notifier (Xiaomi platforms)"
 	depends on !DRM_MSM
 	select AUTO_KPROFILES
 	help
-	  Select this to enable Kprofile's automatic mode changer via mi_drm_notifier.
-	  When this option is enabled, Kprofiles will automatically switch to battery
-	  mode when device screen turns off and will switch back to previously active
-	  mode when the device wakes up.
+	  Enable automatic profile mode switching using the MI DRM notifier.
+	  Select this option for devices that use Xiaomi's MI DRM display
+	  driver instead of the standard MSM DRM driver.
+	  
+	  Functionality is identical to MSM DRM notifier but uses Xiaomi's
+	  proprietary notifier interface.
 
 config AUTO_KPROFILES_FB
-	bool "Auto Kprofiles using fb_notifier"
+	bool "Framebuffer notifier (legacy)"
 	depends on FB
 	select AUTO_KPROFILES
 	help
-	  Select this to enable Kprofile's automatic mode changer via fb_notifier.
-	  When this option is enabled, Kprofiles will automatically switch to
-	  battery mode when device screen turns off and will switch back to
-	  previously active mode when the device wakes up.
+	  Enable automatic profile mode switching using the framebuffer
+	  notifier API. This is a legacy option for older kernels or devices
+	  that don't support DRM-based display management.
+	  
+	  Use this option only if your device doesn't support MSM DRM or
+	  MI DRM notifiers.
 
 config AUTO_KPROFILES_NONE
-	bool "None"
+	bool "None (manual control only)"
 	help
-	  Select this to build Kprofiles without auto Kprofiles.
+	  Disable automatic profile mode switching. Profile modes must be
+	  changed manually via sysfs, kernel APIs, or userspace tools.
+	  
+	  This is the recommended option if:
+	  - Your kernel doesn't support display notifiers
+	  - You want complete manual control over profile modes
+	  - You're implementing custom profile management logic
+	  
+	  Auto Kprofiles can still be enabled at runtime via the auto_kp
+	  sysfs node if a compatible notifier backend is available.
 
 endchoice
 
 config KP_VERBOSE_DEBUG
-	bool "Verbose Kprofiles debugging"
+	bool "Verbose debugging output"
 	default n
 	help
-	  Say Y here if you are testing Kprofiles or trying to
-	  debug and indentify problems.
+	  Enable detailed debug logging for Kprofiles operations. This will
+	  output additional information to the kernel log, including:
+	  
+	  - Mode change events and transitions
+	  - Screen state changes
+	  - API function calls
+	  - Error conditions and validations
+	  
+	  This option is useful for:
+	  - Testing and debugging Kprofiles functionality
+	  - Diagnosing integration issues with other kernel modules
+	  - Understanding profile mode behavior
+	  
+	  Warning: This significantly increases kernel log verbosity.
+	  Only enable this for development and debugging purposes.
+	  
+	  If unsure, say N.
 
-endif # if KPROFILES
+endif # KPROFILES
